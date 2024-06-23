@@ -30,6 +30,18 @@ void InitOsc() {
 	//add code
 }
 
+void InitKeys() {
+	AdcChannelConfig adc_cfg[3];
+	adc_cfg[0].InitMux(D3, 8, D0, D1, D2);
+	adc_cfg[1].InitMux(D4, 8, D0, D1, D2);
+	adc_cfg[2].InitMux(D5, 8, D0, D1, D2);
+	hw.adc.Init(&adc_cfg[3], 3);
+
+	octUp.Init(D13);
+	octDown.Init(D14);
+	oscControl.Init(D11, D12);
+}
+
 void InitChords() {
 	for(uint8_t i = 0; i < 12; i++) {
 		chords[i][0] = i + 1; //root
@@ -72,13 +84,7 @@ int main(void)
 	InitChords();
 
 	//Troubleshoot
-	AdcChannelConfig adc_cfg;
-	adc_cfg.InitMux(D4, 8, D1, D2, D3);
-	hw.adc.Init(&adc_cfg, 1);
-
-	octUp.Init(D13);
-	octDown.Init(D14);
-	oscControl.Init(D11, D12);
+	InitKeys();
 
 	for(uint8_t i = 0; i < 5; i++) {
 		osc[i].Init(samplerate);
@@ -86,6 +92,8 @@ int main(void)
 		osc[i].SetAmp(0.3);
 		osc[i].SetFreq((i * 2) + 200);
 	}
+
+	//switch
 	
 	while(1) {
 
