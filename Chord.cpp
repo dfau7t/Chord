@@ -65,11 +65,13 @@ int main(void)
 	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 	hw.StartAudio(AudioCallback);
 
+	hw.StartLog(true);
 	float samplerate = hw.AudioSampleRate();
 
 	hw.SetLed(true);
 	InitChords();
 
+	//Troubleshoot
 	AdcChannelConfig adc_cfg;
 	adc_cfg.InitMux(D4, 8, D1, D2, D3);
 	hw.adc.Init(&adc_cfg, 1);
@@ -87,15 +89,15 @@ int main(void)
 	
 	while(1) {
 
-		hw.Print("Input 1: %d \n", hw.adc.GetMux(0, 0));
-		hw.Print("Input 2: %d \n", hw.adc.GetMux(0, 1));
-		hw.Print("Input 3: %d \n", hw.adc.GetMux(0, 2));
-		hw.Print("Input 4: %d \n", hw.adc.GetMux(0, 3));
-		hw.Print("Input 5: %d \n", hw.adc.GetMux(0, 4));
-		hw.Print("Input 6: %d \n", hw.adc.GetMux(0, 5));
-		hw.Print("Input 7: %d \n", hw.adc.GetMux(0, 6));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(0, 7));
-		System::Delay(250);
+		// hw.Print("Input 1: %d \n", hw.adc.GetMux(0, 0));
+		// hw.Print("Input 2: %d \n", hw.adc.GetMux(0, 1));
+		// hw.Print("Input 3: %d \n", hw.adc.GetMux(0, 2));
+		// hw.Print("Input 4: %d \n", hw.adc.GetMux(0, 3));
+		// hw.Print("Input 5: %d \n", hw.adc.GetMux(0, 4));
+		// hw.Print("Input 6: %d \n", hw.adc.GetMux(0, 5));
+		// hw.Print("Input 7: %d \n", hw.adc.GetMux(0, 6));
+		// hw.Print("Input 8: %d \n", hw.adc.GetMux(0, 7));
+		// System::Delay(250);
 
 	}
 }
