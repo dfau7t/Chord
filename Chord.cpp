@@ -3,23 +3,130 @@
 
 using namespace daisy;
 using namespace daisysp;
-using namespace seed;
 
 DaisySeed hw;
-Switch octUp, octDown;
-Switch3 oscControl;
-
+Switch oscControl, octDown, octUp; //waveform control, octave down, octave up
+Switch seventh, ninth;
 Oscillator osc[5];
+uint8_t octave = 4, octValue;
 
-uint8_t chords[12][10];
-uint8_t octave = 3;
-uint8_t keys[24];
+long key[24]; //24 key inputs
+uint8_t count = 0; //Oscillator index [0-Saw, 1-Square, 2-Triangle, 3-Sine]
 
-void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
-{
+uint8_t chord[12][10];
 
-	//UpdateOctave();
+void Chords() {
+	for(uint8_t i = 0; i < 12; i++) { // C C# D D# E F F# G G# A A# B
+		chord[i][0] = i; //root
+		chord[i][1] = chord[i][0] + 3; //flat third
+		chord[i][2] = chord[i][1] + 1; //third
+		chord[i][3] = chord[i][2] + 2; //flat fifth
+		chord[i][4] = chord[i][3] + 1;//fifth
+		chord[i][5] = chord[i][4] + 1;//sharp fifth
+		chord[i][6] = chord[i][5] + 1;//sixth
+		chord[i][7] = chord[i][6] + 1;//flat seventh
+		chord[i][8] = chord[i][7] + 1;//seventh
+		chord[i][9] = chord[i][8] + 3;//ninth		
+	}
+}
 
+void UpdateOctave() {
+	if(octDown.RisingEdge()) {
+		octave -= 1;
+	}
+	if(octUp.RisingEdge()) {
+		octave += 1;
+	}
+
+	if(octave > 6) {octave = 6;}
+	if(octave < 2) {octave = 2;}
+
+	octValue = 12 * octave ;
+	//if octDown.RisingEdge() octave -=1; 
+	//if octUp.RisingEdge() octave +=1;
+	//if octave > 5 octave = 5;if octave < 3 octave = 3;
+	//octValue = octave*12
+}
+
+void InitOsc(float samplerate) {
+	//
+}
+
+void UpateFreq(uint8_t root) {
+	//if root < 12, osc[0].freq = chord[i][0] + octValue, osc[1].freq = chord[i][2] + octValue, osc[2].freq = chord[i][4], ...
+	//if root > 12, osc[0].freq = chord[i][0] + octValue, osc[1].freq = chord[i][1] + octValue, osc[2].freq = chord[i][4], ...
+	if(root < 12) {
+		osc[0].SetFreq(mtof(chord[root][0] + octValue)); //root
+		osc[1].SetFreq(mtof(chord[root][2] + octValue)); //third
+		osc[2].SetFreq(mtof(chord[root][4] + octValue)); //fifth
+		osc[3].SetFreq(mtof(chord[root][8] + octValue)); //seventh
+		osc[4].SetFreq(mtof(chord[root][9] + octValue)); //ninth
+	} else if(root >= 12) {
+		osc[0].SetFreq(mtof(chord[root - 12][0] + octValue)); //root
+		osc[1].SetFreq(mtof(chord[root - 12][1] + octValue)); //flat third
+		osc[2].SetFreq(mtof(chord[root - 12][4] + octValue)); //fifth
+		osc[3].SetFreq(mtof(chord[root][8] + octValue)); //seventh
+		osc[4].SetFreq(mtof(chord[root][9] + octValue)); //ninth
+
+	}
+}
+
+void InitKeys() {
+	AdcChannelConfig adc_cfg[3];
+    adc_cfg[0].InitMux(seed::A0, 8, seed::D1, seed::D2, seed::D3); //keys 0-7
+    adc_cfg[1].InitMux(seed::A1, 8, seed::D1, seed::D2, seed::D3); //keys 8-15
+    adc_cfg[2].InitMux(seed::A2, 8, seed::D1, seed::D2, seed::D3); //keys 16-23
+    hw.adc.Init(adc_cfg, 3);
+    hw.adc.Start();
+}
+
+void HandleKeyInput() {
+	for(uint8_t i = 0; i < 8; i++) {
+		key[i] = hw.adc.GetMux(0, i);
+		key[i + 8] = hw.adc.GetMux(1, i);
+		key[i + 16] = hw.adc.GetMux(2, i);
+
+		if(key[i] < 32767) {key[i] = 0;}
+		if(key[i + 8] < 32767) {key[i + 8] = 0;}
+		if(key[i + 16] < 32767) {key[i + 16] = 0;}
+		if(key[i] > 40000) {key[i] = 1;}
+		if(key[i + 8] > 40000) {key[i + 8] = 1;}
+		if(key[i + 16] > 40000) {key[i + 16] = 1;}
+	}
+
+	for(uint8_t i = 0; i < 24; i++) {
+		if(key[i] > 0) {
+			//update osc with chord freq
+			hw.PrintLine("Key: %i", i);
+			UpateFreq(i);
+			//setamp = 1
+		} else {
+			//setamp = 0
+		}
+	}
+}
+
+
+void UpdateWaveform() {
+	int wf;
+	if(oscControl.RisingEdge()) {
+		count += 1;
+		// hw.PrintLine("%d", count);
+		if(count > 3) {count = 0;}
+
+		switch(count) {
+			case 0: hw.PrintLine("Saw"); wf = Oscillator::WAVE_POLYBLEP_SAW; break;
+			case 1: hw.PrintLine("Sqr"); wf = Oscillator::WAVE_SQUARE; break;
+			case 2: hw.PrintLine("Tri"); wf = Oscillator::WAVE_TRI; break;
+			case 3: hw.PrintLine("Sin"); wf = Oscillator::WAVE_SIN; break;
+		}
+		for(uint8_t i = 0; i < 5; i++) {
+			osc[i].SetWaveform(wf);
+		}
+	}
+}
+
+void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size) {
 	for (size_t i = 0; i < size; i++)
 	{
 		out[0][i] = in[0][i];
@@ -27,169 +134,53 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 	}
 }
 
-void InitOsc(float samplerate) {
-
-	for(uint8_t i = 0; i < 5; i++) {
-		osc[i].Init(samplerate);
-		osc[i].SetWaveform(Oscillator::WAVE_SIN);
-		osc[i].SetAmp(0.3);
-		osc[i].SetFreq((i * 2) + 200);
-	}
-}
-
-void InitKeys() {
-	AdcChannelConfig adc_cfg[3];
-	adc_cfg[0].InitMux(D3, 8, D0, D1, D2); //buttons 0-7
-	adc_cfg[1].InitMux(D4, 8, D0, D1, D2); //buttons 8-15
-	adc_cfg[2].InitMux(D5, 8, D0, D1, D2); //buttons 16-23
-	hw.adc.Init(&adc_cfg[3], 3);
-	hw.adc.Start();
-
-	octUp.Init(D13);
-	octDown.Init(D14);
-	oscControl.Init(D11, D12);
-}
-
-void SetupKeys() {
-	for(uint8_t i = 0; i < 8; i++) {
-		keys[i] = hw.adc.GetMux(0, i);
-	}
-
-	for(uint8_t i = 0; i >= 8 && i < 16; i++) {
-		keys[i] = hw.adc.GetMux(0, i);
-	}
-
-	for(uint8_t i = 0; i >= 16 && i < 24; i++) {
-		keys[i] = hw.adc.GetMux(0, i);
-	}
-}
-
-void UpdateKeys() {
-	switch(keys[24]) {
-		// osc1 = chord[i][0], osc2 = chord[i][2] * octave, osc3 = chord[i][4] * octave, osc4 = chord[i][8] * octave, osc5 = chord[i][9] * octave
-		case 0: break;
-		case 1: break;
-		case 2: break;
-		case 3: break;
-		case 4: break;
-		case 5: break;
-		case 6: break;
-		case 7: break;
-		case 8: break;
-		case 9: break;
-		case 10: break;
-		case 11: break;
-		case 12: break;
-		case 13: break;
-		case 14: break;
-		case 15: break;
-		case 16: break;
-		case 17: break;
-		case 18: break;
-		case 19: break;
-		case 20: break;
-		case 21: break;
-		case 22: break;
-		case 23: break;
-	}
-}
-
-void Envelope() {
-	//handles  amp envelope for all oscillators
-	//seperate from master volume
-}
-
-void InitChords() {
-	for(uint8_t i = 0; i < 12; i++) {
-		chords[i][0] = i + 1; //root
-		chords[i][1] = chords[i][0] + 3; //flat third
-		chords[i][2] = chords[i][1] + 1; //third
-		chords[i][3] = chords[i][2] + 2; //flat fifth
-		chords[i][4] = chords[i][3] + 1;//fifth
-		chords[i][5] = chords[i][4] + 1;//sharp fifth
-		chords[i][6] = chords[i][5] + 1;//sixth
-		chords[i][7] = chords[i][6] + 1;//flat seventh
-		chords[i][8] = chords[i][7] + 1;//seventh
-		chords[i][9] = chords[i][8] + 3;//ninth		
-	}
-}
-
-void UpdateOctave() {
-	if(octUp.RisingEdge()) {
-		octave += 1;
-	}
-
-	if(octDown.RisingEdge()) {
-		octave -= 1;
-	}
-
-	if(octave < 0) {octave = 0;}
-	if(octave > 4) {octave = 4;}
-}
-
-void UpdateWaveform() {
-	uint8_t wf;
-	switch (oscControl.Read()) {
-		case Switch3::POS_LEFT: wf = Oscillator::WAVE_POLYBLEP_SAW; break;
-		case Switch3::POS_CENTER: wf = Oscillator::WAVE_SIN; break;
-		case Switch3::POS_RIGHT: wf = Oscillator::WAVE_POLYBLEP_SQUARE; break;
-	}
-
-	for(uint8_t i = 0; i < 5; i++) {
-		osc[i].SetWaveform(wf);
-	}
-}
-
-int main(void)
-{
-	hw.Init();
+int main(void) {
+    hw.Init();
+	hw.SetLed(true);
 	hw.SetAudioBlockSize(4); // number of samples handled per callback
 	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 	hw.StartAudio(AudioCallback);
 
-	float samplerate = hw.AudioSampleRate();
+	float sr = hw.AudioSampleRate();
 
-	hw.SetLed(true);
-	InitChords();
+	Chords();
 
-	//Troubleshoot
+	//Initialize individual buttons
+	oscControl.Init(seed::D4);
+	octDown.Init(seed::D5);
+	octUp.Init(seed::D6);
+
 	InitKeys();
-	InitOsc(samplerate);
+	InitOsc(sr);
 
-	hw.StartLog(true);
-
-
-	//switch
-	
-	while(1) {
-
-		hw.Print("Input 1: %d \n", hw.adc.GetMux(0, 0));
-		hw.Print("Input 2: %d \n", hw.adc.GetMux(0, 1));
-		hw.Print("Input 3: %d \n", hw.adc.GetMux(0, 2));
-		hw.Print("Input 4: %d \n", hw.adc.GetMux(0, 3));
-		hw.Print("Input 5: %d \n", hw.adc.GetMux(0, 4));
-		hw.Print("Input 6: %d \n", hw.adc.GetMux(0, 5));
-		hw.Print("Input 7: %d \n", hw.adc.GetMux(0, 6));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(0, 7));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(1, 0));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(1, 1));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(1, 2));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(1, 3));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(1, 4));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(1, 5));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(1, 6));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(1, 7));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(2, 0));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(2, 1));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(2, 2));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(2, 3));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(2, 4));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(2, 5));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(2, 6));
-		hw.Print("Input 8: %d \n", hw.adc.GetMux(2, 7));
-
-
-		System::Delay(250);
-
+	for(uint8_t i = 0; i < 5; i++) {
+		osc[i].Init(sr);
 	}
+    
+
+    hw.StartLog(true);
+
+    while(1)
+    {
+		oscControl.Debounce();
+		HandleKeyInput(); //mux
+		UpdateOctave(); //octave control
+		UpdateWaveform(); //oscControl
+
+        System::Delay(10);
+		// hw.PrintLine("%d", key[8]);
+
+
+		
+		
+    }
 }
+
+/*
+keys 0-11 major triads
+keys 12-23 minor triads
+
+osc freq = chord + octave
+
+
+*/
